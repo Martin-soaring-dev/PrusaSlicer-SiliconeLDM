@@ -75,6 +75,10 @@ public:
     double retract_length_toolchange() const;
     double retract_restart_extra_toolchange() const;
 
+    // Silicone mode: when enabled, extrude/retract/unretract return (0,0) — no E-axis movement.
+    void   set_silicone_mode(bool enabled) { m_silicone_mode = enabled; }
+    bool   silicone_mode() const { return m_silicone_mode; }
+
 private:
     // Private constructor to create a key for a search in std::set.
     Extruder(unsigned int id) : m_id(id) {}
@@ -94,6 +98,7 @@ private:
     // When retracted, this value stores the extra amount of priming on deretraction.
     double       m_restart_extra { 0 };
     double       m_e_per_mm3;
+    bool         m_silicone_mode { false };
 };
 
 // Sort Extruder objects by the extruder id by default.

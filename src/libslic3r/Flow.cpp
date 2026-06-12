@@ -230,6 +230,26 @@ double Flow::mm3_per_mm() const
     return res;
 }
 
+// Silicone pneumatic extrusion: compute movement speed from line width and layer height.
+// speed = flow_rate / (width × height), clamped to [min_speed, max_speed].
+// Returns 0 if flow_rate <= 0 (silicone mode disabled).
+float Flow::speed_for_silicone(float flow_rate_mm3_per_sec, float min_speed, float max_speed) const
+{
+    if (flow_rate_mm3_per_sec <= 0.f || m_width <= 0.f || m_height <= 0.f)
+        return 0.f;
+
+    // F = Q / (W × H)
+    float speed = flow_rate_mm3_per_sec / (m_width * m_height);
+
+    // Clamp to configured speed limits
+    if (speed < min_speed)
+        speed = min_speed;
+    if (speed > max_speed)
+        speed = max_speed;
+
+    return speed;
+}
+
 static float min_nozzle_diameter(const PrintObject &print_object)
 {
     const ConfigOptionFloats &nozzle_diameters    = print_object.print()->config().nozzle_diameter;

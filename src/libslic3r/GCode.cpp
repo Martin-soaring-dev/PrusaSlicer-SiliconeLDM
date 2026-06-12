@@ -1029,8 +1029,9 @@ void GCodeGenerator::_do_export(Print& print, GCodeOutputStream &file, Thumbnail
     if (print.config().spiral_vase.value)
         m_spiral_vase = make_unique<SpiralVase>(print.config());
 
-    if (print.config().max_volumetric_extrusion_rate_slope_positive.value > 0 ||
-        print.config().max_volumetric_extrusion_rate_slope_negative.value > 0)
+    if ((print.config().max_volumetric_extrusion_rate_slope_positive.value > 0 ||
+         print.config().max_volumetric_extrusion_rate_slope_negative.value > 0) &&
+        !print.config().silicone_mode.value)  // Skip in silicone mode: no E axis to equalize
         m_pressure_equalizer = make_unique<PressureEqualizer>(print.config());
     m_enable_extrusion_role_markers = (bool)m_pressure_equalizer;
 
@@ -2973,6 +2974,11 @@ void GCodeGenerator::encode_full_config(const Print& print, std::vector<std::pai
 void GCodeGenerator::set_extruders(const std::vector<unsigned int> &extruder_ids)
 {
     m_writer.set_extruders(extruder_ids);
+
+    // Set silicone mode on all extruders if enabled in config.
+    if (m_config.silicone_mode.value)
+        m_writer.set_silicone_mode(true);
+
     m_wipe.init(this->config(), extruder_ids);
 }
 
@@ -3387,7 +3393,11 @@ std::string GCodeGenerator::_extrude(
     }
 
     // compensate retraction
-    gcode += this->unretract();
+    if (m_config.silicone_mode.value) {
+        gcode += m_writer.unretract_silicone(m_config.silicone_pressure_on_delay.value);
+    } else {
+        gcode += this->unretract();
+    }
 
     if (m_writer.multiple_extruders && !has_active_instance) {
         gcode += m_label_objects.maybe_change_instance(m_writer);
@@ -3556,6 +3566,17 @@ std::string GCodeGenerator::_extrude(
     }
 
     // F is mm per minute.
+    // Silicone mode: override speed based on flow rate and extrusion width.
+    // F = Q / (W × H) × 60, clamped to [min_speed, max_speed].
+    if (m_config.silicone_mode.value) {
+        Flow silicone_flow(path_attr.width, path_attr.height, m_config.nozzle_diameter.get_at(m_writer.extruder()->id()));
+        float silicone_speed_mm_per_sec = silicone_flow.speed_for_silicone(
+            m_config.silicone_flow_rate.value,
+            m_config.silicone_min_speed.value,
+            m_config.silicone_max_speed.value);
+        if (silicone_speed_mm_per_sec > 0.f)
+            F = silicone_speed_mm_per_sec * 60.0;  // mm/s → mm/min
+    }
     gcode += m_writer.set_speed(F, "", cooling_marker_setspeed_comments);
 
     if (dynamic_print_and_fan_speeds.fan_speed >= 0) {
@@ -3603,21 +3624,39 @@ std::string GCodeGenerator::_extrude(
             if (radius == 0) {
                 // Extrude line segment.
                 if (const double line_length = (p - prev).norm(); line_length > 0) {
-                    double extrusion_amount{e_per_mm * line_length * it->e_fraction};
-                    if (it->height_fraction < 1.0 || std::prev(it)->height_fraction < 1.0) {
-                        const Vec3d destination{to_3d(p, this->m_last_layer_z + (it->height_fraction - 1) * m_last_height)};
-                        gcode += m_writer.extrude_to_xyz(destination, extrusion_amount);
+                    if (m_config.silicone_mode.value) {
+                        // Silicone mode: no E axis, speed controls line width.
+                        if (it->height_fraction < 1.0 || std::prev(it)->height_fraction < 1.0) {
+                            const Vec3d destination{to_3d(p, this->m_last_layer_z + (it->height_fraction - 1) * m_last_height)};
+                            gcode += m_writer.extrude_to_xyz_silicone(destination, F);
+                        } else {
+                            gcode += m_writer.extrude_to_xy_silicone(p, F, comment);
+                        }
                     } else {
-                        gcode += m_writer.extrude_to_xy(p, extrusion_amount, comment);
+                        double extrusion_amount{e_per_mm * line_length * it->e_fraction};
+                        if (it->height_fraction < 1.0 || std::prev(it)->height_fraction < 1.0) {
+                            const Vec3d destination{to_3d(p, this->m_last_layer_z + (it->height_fraction - 1) * m_last_height)};
+                            gcode += m_writer.extrude_to_xyz(destination, extrusion_amount);
+                        } else {
+                            gcode += m_writer.extrude_to_xy(p, extrusion_amount, comment);
+                        }
                     }
                 }
             } else {
-                double angle = Geometry::ArcWelder::arc_angle(prev.cast<double>(), p.cast<double>(), double(radius));
-                assert(angle > 0);
-                const double line_length = angle * std::abs(radius);
-                const double dE          = e_per_mm * line_length;
-                assert(dE > 0);
-                gcode += m_writer.extrude_to_xy_G2G3IJ(p, ij, it->ccw(), dE, comment);
+                // Silicone mode: skip arc extrusion (arcs not supported for silicone yet)
+                if (m_config.silicone_mode.value) {
+                    // Fall back to linear extrusion for arcs in silicone mode
+                    if (const double line_length = (p - prev).norm(); line_length > 0) {
+                        gcode += m_writer.extrude_to_xy_silicone(p, F, comment);
+                    }
+                } else {
+                    double angle = Geometry::ArcWelder::arc_angle(prev.cast<double>(), p.cast<double>(), double(radius));
+                    assert(angle > 0);
+                    const double line_length = angle * std::abs(radius);
+                    const double dE          = e_per_mm * line_length;
+                    assert(dE > 0);
+                    gcode += m_writer.extrude_to_xy_G2G3IJ(p, ij, it->ccw(), dE, comment);
+                }
             }
             prev = p;
             prev_exact = p_exact;
@@ -3870,6 +3909,16 @@ std::string GCodeGenerator::retract_and_wipe(bool toolchange, bool reset_e)
 
     if (m_writer.extruder() == nullptr)
         return gcode;
+
+    // Silicone mode: retraction is pressure off + delay, no E-axis movement.
+    if (m_config.silicone_mode.value) {
+        gcode += m_writer.retract_silicone(
+            m_config.silicone_pressure_off_delay.value,
+            m_config.silicone_vacuum_retract_time.value);
+        if (reset_e)
+            gcode += m_writer.reset_e();
+        return gcode;
+    }
 
     // wipe (if it's enabled for this extruder and we have a stored wipe path)
     if (EXTRUDER_CONFIG(wipe) && m_wipe.has_path()) {

@@ -46,6 +46,8 @@ public:
     void                 apply_print_config(const PrintConfig &print_config);
     // Extruders are expected to be sorted in an increasing order.
     void                 set_extruders(std::vector<unsigned int> extruder_ids);
+    // Set silicone mode on all extruders.
+    void                 set_silicone_mode(bool enabled);
     const std::vector<Extruder>& extruders() const { return m_extruders; }
     std::vector<unsigned int> extruder_ids() const { 
         std::vector<unsigned int> out; 
@@ -118,6 +120,15 @@ public:
     std::string retract(bool before_wipe = false);
     std::string retract_for_toolchange(bool before_wipe = false);
     std::string unretract();
+
+    // Silicone pneumatic extrusion G-code output methods.
+    // Extrude move without E axis: G1 X{x} Y{y} F{speed_mm_per_min}
+    std::string extrude_to_xy_silicone(const Vec2d &point, double speed_mm_per_min, const std::string_view comment = {});
+    std::string extrude_to_xyz_silicone(const Vec3d &point, double speed_mm_per_min, const std::string_view comment = {});
+    // Retraction for silicone: M107 (pressure off) + G4 P{delay_ms} + optional vacuum valve.
+    std::string retract_silicone(double pressure_off_delay_ms, double vacuum_retract_time_ms);
+    // Unretraction for silicone: M106 (pressure on) + G4 P{delay_ms}.
+    std::string unretract_silicone(double pressure_on_delay_ms);
 
     // Current position of the printer, in G-code coordinates.
     // Z coordinate of current position contains zhop. If zhop is applied (this->zhop() > 0),

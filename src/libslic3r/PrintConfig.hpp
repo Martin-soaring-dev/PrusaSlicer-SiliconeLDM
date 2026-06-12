@@ -1052,6 +1052,17 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionFloats,             wiping_volumes_matrix))
     ((ConfigOptionBool,               wiping_volumes_use_custom_matrix))
     ((ConfigOptionFloat,              z_offset))
+
+    // Silicone pneumatic extrusion mode (Martin, 2026)
+    ((ConfigOptionBool,                silicone_mode))
+    ((ConfigOptionFloat,               silicone_flow_rate))           // mm³/s, constant volumetric flow rate Q
+    ((ConfigOptionFloat,               silicone_pressure_on_delay))   // ms, delay after pressure ON before moving
+    ((ConfigOptionFloat,               silicone_pressure_off_delay))  // ms, delay after pressure OFF before next action
+    ((ConfigOptionFloat,               silicone_vacuum_retract_time)) // ms, vacuum valve retraction duration (0 = disabled)
+    ((ConfigOptionFloat,               silicone_min_speed))           // mm/s, minimum movement speed (→ max line width)
+    ((ConfigOptionFloat,               silicone_max_speed))           // mm/s, maximum movement speed (→ min line width)
+    ((ConfigOptionFloat,               silicone_speed_ramp_length))   // mm, speed ramp distance at start/end of extrusion
+    ((ConfigOptionFloat,               silicone_min_speed_ratio))     // ratio of target speed at ramp start (0.0-1.0)
 )
 
 PRINT_CONFIG_CLASS_DERIVED_DEFINE0(

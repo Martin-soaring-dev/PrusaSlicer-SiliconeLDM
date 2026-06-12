@@ -67,6 +67,12 @@ void GCodeWriter::set_extruders(std::vector<unsigned int> extruder_ids)
     this->multiple_extruders = (*std::max_element(extruder_ids.begin(), extruder_ids.end())) > 0;
 }
 
+void GCodeWriter::set_silicone_mode(bool enabled)
+{
+    for (Extruder &e : m_extruders)
+        e.set_silicone_mode(enabled);
+}
+
 std::string GCodeWriter::preamble()
 {
     std::ostringstream gcode;
@@ -562,6 +568,94 @@ std::string GCodeWriter::unretract()
         }
     }
     
+    return gcode;
+}
+
+// Silicone pneumatic extrusion: extrude move without E axis.
+// Output: G1 X{x} Y{y} F{speed_mm_per_min}
+std::string GCodeWriter::extrude_to_xy_silicone(const Vec2d &point, double speed_mm_per_min, const std::string_view comment)
+{
+    m_pos.head<2>() = point.head<2>();
+
+    GCodeG1Formatter w;
+    w.emit_xy(point);
+    w.emit_f(speed_mm_per_min);
+    w.emit_comment(this->config.gcode_comments, comment);
+    return w.string();
+}
+
+// Silicone pneumatic extrusion: extrude move with Z, without E axis.
+// Output: G1 X{x} Y{y} Z{z} F{speed_mm_per_min}
+std::string GCodeWriter::extrude_to_xyz_silicone(const Vec3d &point, double speed_mm_per_min, const std::string_view comment)
+{
+    m_pos = point;
+
+    GCodeG1Formatter w;
+    w.emit_xyz(point);
+    w.emit_f(speed_mm_per_min);
+    w.emit_comment(this->config.gcode_comments, comment);
+    return w.string();
+}
+
+// Silicone retraction: turn off pressure, wait, optional vacuum valve.
+// Output: M107 + G4 P{off_delay} + [M106 P2 S255 + G4 P{vacuum} + M106 P2 S0]
+std::string GCodeWriter::retract_silicone(double pressure_off_delay_ms, double vacuum_retract_time_ms)
+{
+    std::string gcode;
+
+    // Turn off pressure
+    gcode += "M107";
+    if (this->config.gcode_comments)
+        gcode += " ; turn off pressure (silicone retract)";
+    gcode += "\n";
+
+    // Wait for residual flow to stop
+    if (pressure_off_delay_ms > 0) {
+        gcode += "G4 P" + std::to_string(static_cast<int>(pressure_off_delay_ms));
+        if (this->config.gcode_comments)
+            gcode += " ; wait for pressure off";
+        gcode += "\n";
+    }
+
+    // Optional vacuum valve retraction
+    if (vacuum_retract_time_ms > 0) {
+        gcode += "M106 P2 S255";
+        if (this->config.gcode_comments)
+            gcode += " ; vacuum valve ON";
+        gcode += "\n";
+        gcode += "G4 P" + std::to_string(static_cast<int>(vacuum_retract_time_ms));
+        if (this->config.gcode_comments)
+            gcode += " ; vacuum retract";
+        gcode += "\n";
+        gcode += "M106 P2 S0";
+        if (this->config.gcode_comments)
+            gcode += " ; vacuum valve OFF";
+        gcode += "\n";
+    }
+
+    return gcode;
+}
+
+// Silicone unretraction: turn on pressure, wait for flow stabilization.
+// Output: M106 + G4 P{on_delay}
+std::string GCodeWriter::unretract_silicone(double pressure_on_delay_ms)
+{
+    std::string gcode;
+
+    // Turn on pressure
+    gcode += "M106";
+    if (this->config.gcode_comments)
+        gcode += " ; turn on pressure (silicone unretract)";
+    gcode += "\n";
+
+    // Wait for flow to stabilize
+    if (pressure_on_delay_ms > 0) {
+        gcode += "G4 P" + std::to_string(static_cast<int>(pressure_on_delay_ms));
+        if (this->config.gcode_comments)
+            gcode += " ; wait for pressure on";
+        gcode += "\n";
+    }
+
     return gcode;
 }
 

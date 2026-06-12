@@ -130,6 +130,11 @@ public:
 	static double extrusion_width(const std::string &opt_key, const ConfigOptionFloatOrPercent *opt, const ConfigOptionResolver &config, const unsigned int first_printing_extruder = 0);
 	static double extrusion_width(const std::string &opt_key, const ConfigOptionResolver &config, const unsigned int first_printing_extruder = 0);
 
+    // Silicone pneumatic extrusion: compute movement speed from line width and layer height.
+    // speed = flow_rate / (width × height), clamped to [min_speed, max_speed].
+    // Returns 0 if flow_rate <= 0 (silicone mode disabled).
+    float speed_for_silicone(float flow_rate_mm3_per_sec, float min_speed, float max_speed) const;
+
 private:
     Flow(float width, float height, float spacing, float nozzle_diameter, bool bridge) : 
         m_width(width), m_height(height), m_spacing(spacing), m_nozzle_diameter(nozzle_diameter), m_bridge(bridge) 

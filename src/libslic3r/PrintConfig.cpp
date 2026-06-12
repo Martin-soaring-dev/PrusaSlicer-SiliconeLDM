@@ -3945,6 +3945,98 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(0));
 
+    // Silicone pneumatic extrusion mode (Martin, 2026)
+    def = this->add("silicone_mode", coBool);
+    def->label = L("Silicone extrusion mode");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Enable silicone pneumatic extrusion mode. Replaces FDM extrusion model (variable E) "
+                     "with speed-based line width control (variable F). Pressure is controlled via M106/M107, "
+                     "retraction via vacuum valve timing.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("silicone_flow_rate", coFloat);
+    def->label = L("Silicone flow rate");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Constant volumetric flow rate of the silicone pneumatic extrusion system. "
+                     "Determined by air pressure, syringe size, and nozzle diameter. "
+                     "Line width is controlled by varying movement speed: F = Q / (W × H).");
+    def->sidetext = L("mm³/s");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(7.44));
+
+    def = this->add("silicone_pressure_on_delay", coFloat);
+    def->label = L("Pressure ON delay");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Delay after turning on pressure (M106) before starting extrusion movement. "
+                     "Compensates for the lag between valve opening and material flow stabilization.");
+    def->sidetext = L("ms");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(150));
+
+    def = this->add("silicone_pressure_off_delay", coFloat);
+    def->label = L("Pressure OFF delay");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Delay after turning off pressure (M107) before next action. "
+                     "Compensates for residual material flow after valve closure.");
+    def->sidetext = L("ms");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(400));
+
+    def = this->add("silicone_vacuum_retract_time", coFloat);
+    def->label = L("Vacuum retract time");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Duration of vacuum valve activation for retraction. "
+                     "Set to 0 to disable vacuum retraction. Typical value: 100ms.");
+    def->sidetext = L("ms");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0));
+
+    def = this->add("silicone_min_speed", coFloat);
+    def->label = L("Minimum speed");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Minimum movement speed during extrusion. Determines the maximum achievable line width: "
+                     "W_max = Q / (F_min × H). Slower speed = wider line.");
+    def->sidetext = L("mm/s");
+    def->min = 0.1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(2));
+
+    def = this->add("silicone_max_speed", coFloat);
+    def->label = L("Maximum speed");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Maximum movement speed during extrusion. Determines the minimum achievable line width: "
+                     "W_min = Q / (F_max × H). Faster speed = thinner line.");
+    def->sidetext = L("mm/s");
+    def->min = 0.1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(30));
+
+    def = this->add("silicone_speed_ramp_length", coFloat);
+    def->label = L("Speed ramp length");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Distance over which speed ramps up at extrusion start and ramps down at extrusion end. "
+                     "Helps eliminate head/tail material accumulation.");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(2));
+
+    def = this->add("silicone_min_speed_ratio", coFloat);
+    def->label = L("Speed ramp start ratio");
+    def->category = L("Silicone Extrusion");
+    def->tooltip = L("Ratio of target speed at the start/end of speed ramp. "
+                     "0.3 means the ramp starts at 30% of target speed.");
+    def->sidetext = L("");
+    def->min = 0.05;
+    def->max = 1.0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.3));
+
     def = this->add("perimeter_generator", coEnum);
     def->label = L("Perimeter generator");
     def->category = L("Layers and Perimeters");

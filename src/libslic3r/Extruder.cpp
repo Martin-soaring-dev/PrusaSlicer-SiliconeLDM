@@ -32,6 +32,10 @@ Extruder::Extruder(unsigned int id, GCodeConfig *config) :
 
 std::pair<double, double> Extruder::extrude(double dE)
 {
+    // Silicone mode: no E-axis movement, extrusion is controlled by pressure (M106/M107) and speed (F).
+    if (m_silicone_mode)
+        return std::make_pair(0., 0.);
+
     assert(! std::isnan(dE));
     // in case of relative E distances we always reset to 0 before any output
     if (m_config->use_relative_e_distances)
@@ -54,6 +58,10 @@ std::pair<double, double> Extruder::extrude(double dE)
    value supplied will overwrite the previous one if any. */
 std::pair<double, double> Extruder::retract(double retract_length, double restart_extra)
 {
+    // Silicone mode: retraction is handled by M107 + G4 (pressure off + delay), no E-axis movement.
+    if (m_silicone_mode)
+        return std::make_pair(0., 0.);
+
     assert(! std::isnan(retract_length));
     assert(! std::isnan(restart_extra) && restart_extra >= 0);
     // in case of relative E distances we always reset to 0 before any output
@@ -77,6 +85,10 @@ double Extruder::retract_to_go(double retract_length) const
 
 std::pair<double, double> Extruder::unretract()
 {
+    // Silicone mode: unretraction is handled by M106 + G4 (pressure on + delay), no E-axis movement.
+    if (m_silicone_mode)
+        return std::make_pair(0., 0.);
+
     auto [dE, emitE] = this->extrude(m_retracted + m_restart_extra);
     m_retracted     = 0.;
     m_restart_extra = 0.;
