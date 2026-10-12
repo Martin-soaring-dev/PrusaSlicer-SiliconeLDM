@@ -3743,7 +3743,16 @@ std::string GCodeGenerator::generate_travel_gcode(
 
 bool GCodeGenerator::needs_retraction(const Polyline &travel, ExtrusionRole role)
 {
-    if (! m_writer.extruder() || travel.length() < scale_(EXTRUDER_CONFIG(retract_before_travel))) {
+    if (! m_writer.extruder())
+        return false;
+
+    // Pneumatic silicone extrusion has no E-axis retraction. Pressure must be shut off
+    // before every travel move, including short moves that FDM would skip retracting.
+    // Do this before the regular FDM travel-length and perimeter-based heuristics.
+    if (m_config.silicone_mode.value)
+        return true;
+
+    if (travel.length() < scale_(EXTRUDER_CONFIG(retract_before_travel))) {
         // skip retraction if the move is shorter than the configured threshold
         return false;
     }
@@ -3864,7 +3873,9 @@ std::string GCodeGenerator::travel_to(
 
     const unsigned extruder_id = this->m_writer.extruder()->id();
     const double retract_length = this->m_config.retract_length.get_at(extruder_id);
-    bool can_be_flat{!needs_retraction || retract_length == 0};
+    // Silicone pressure shutoff is not a filament retraction and must not implicitly
+    // trigger the FDM retract-lift path. Silicone nozzle lift is configured separately.
+    bool can_be_flat{m_config.silicone_mode.value || !needs_retraction || retract_length == 0};
 
     const double upper_limit = this->m_config.retract_lift_below.get_at(extruder_id);
     const double lower_limit = this->m_config.retract_lift_above.get_at(extruder_id);
