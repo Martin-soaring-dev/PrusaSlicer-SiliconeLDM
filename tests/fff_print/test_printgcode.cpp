@@ -17,6 +17,41 @@ boost::regex perimeters_regex("G1 X[-0-9.]* Y[-0-9.]* E[-0-9.]* ; perimeter");
 boost::regex infill_regex("G1 X[-0-9.]* Y[-0-9.]* E[-0-9.]* ; infill");
 boost::regex skirt_regex("G1 X[-0-9.]* Y[-0-9.]* E[-0-9.]* ; skirt");
 
+TEST_CASE("Silicone pressure is shut off before short travels", "[GCode]") {
+    DynamicPrintConfig config = Slic3r::DynamicPrintConfig::full_print_config();
+    config.set_deserialize_strict({
+        { "silicone_mode", true },
+        // Deliberately make the FDM travel threshold larger than the model so
+        // short travel moves would normally skip filament retraction.
+        { "retract_before_travel", 1000 },
+        { "silicone_pressure_off_delay", 20 },
+        { "silicone_pressure_on_delay", 10 },
+        { "start_gcode", "" },
+        { "end_gcode", "" },
+        { "cooling", false },
+        { "gcode_comments", true }
+    });
+
+    const std::string gcode = Slic3r::Test::slice({TestMesh::cube_20x20x20}, config);
+
+    auto count_occurrences = [](const std::string& text, const std::string& needle) {
+        std::size_t count = 0;
+        std::size_t pos = 0;
+        while ((pos = text.find(needle, pos)) != std::string::npos) {
+            ++count;
+            pos += needle.size();
+        }
+        return count;
+    };
+
+    // The initial state may emit one pressure-off command, but travel moves
+    // must also shut pressure off even when the FDM retract threshold is huge.
+    CHECK(count_occurrences(gcode, "M107 ; turn off pressure (silicone retract)") > 1);
+    CHECK(gcode.find("G4 P20 ; wait for pressure off") != std::string::npos);
+    CHECK(gcode.find("M106 ; turn on pressure (silicone unretract)") != std::string::npos);
+    CHECK(gcode.find("G4 P10 ; wait for pressure on") != std::string::npos);
+}
+
 SCENARIO( "PrintGCode basic functionality", "[PrintGCode]") {
     GIVEN("A default configuration and a print test object") {
         WHEN("the output is executed with no support material") {
